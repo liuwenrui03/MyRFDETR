@@ -26,6 +26,30 @@ def test_dino_ref_branch_keyframe_selection_includes_last_frame() -> None:
     assert indices == [0, 2, 4]
 
 
+def test_dino_ref_branch_attn_pool_output_shape() -> None:
+    """attn_pool aggregator should produce the same token shape contract as other aggregators."""
+    branch = DinoRefBranch(keyframe_stride=1, aggregator="attn_pool", embedding_dim=32, num_tokens=9)
+    x = torch.randn(2, 3, 24, 16, 16)
+    y = branch(x)
+    assert y.shape == (2, 9, 32)
+
+
+def test_dino_ref_branch_accepts_encoder_feature_channels() -> None:
+    """DinoRefBranch should support non-RGB encoder feature channels on real-token path."""
+    branch = DinoRefBranch(keyframe_stride=2, aggregator="ema", embedding_dim=48, num_tokens=16)
+    x = torch.randn(2, 4, 96, 12, 12)
+    y = branch(x)
+    assert y.shape == (2, 16, 48)
+
+
+def test_dino_ref_branch_accepts_unpooled_patch_token_sequence() -> None:
+    """DinoRefBranch should accept [B,T,N,C] unpooled patch tokens from backbone internals."""
+    branch = DinoRefBranch(keyframe_stride=1, aggregator="mean", embedding_dim=40, num_tokens=25)
+    x = torch.randn(2, 3, 25, 96)
+    y = branch(x)
+    assert y.shape == (2, 25, 40)
+
+
 def test_dino_ref_injector_gate_zero_cross_attn_equivalence() -> None:
     """With gate_init=0 and cross_attn mode, injection should preserve features exactly."""
     injector = DinoRefInjector(fusion_mode="cross_attn", gate_init=0.0, stages=[0])

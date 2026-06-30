@@ -316,8 +316,9 @@ class Backbone(BackboneBase):
         raw_feats = [self._aggregate_temporal_feature(feat) for feat in raw_feats_temporal]
 
         if self.dino_ref_branch is not None and self.dino_ref_injector is not None:
-            ref_vec = self.dino_ref_branch(x)
-            raw_feats = self.dino_ref_injector.inject(raw_feats, ref_vec)
+            deepest_patch_tokens = raw_feats_temporal[-1].flatten(3).permute(0, 1, 3, 2)  # [B, T, N, C]
+            ref_tokens = self.dino_ref_branch(deepest_patch_tokens)
+            raw_feats = self.dino_ref_injector.inject(raw_feats, ref_tokens)
 
         if self.lidar_branch is not None and self.lidar_fusion is not None:
             lidar_input = getattr(tensor_list, "lidar", None)

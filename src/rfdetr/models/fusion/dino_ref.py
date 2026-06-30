@@ -14,15 +14,14 @@ from torch import nn
 
 
 class DinoRefBranch(nn.Module):
-    """Lightweight DINO-reference branch with keyframe-aware temporal aggregation.
+    """DINO-reference branch with keyframe-aware temporal aggregation.
 
-    PR-5+ token upgrade:
-    - Accepts batched temporal image tensors ``[B, T, C, H, W]``.
-    - Applies keyframe sampling policy and temporal aggregation.
-    - Produces token-level reference features ``[B, N, D]`` where ``N=num_tokens``.
-
-    This keeps interfaces stable so a real frozen DINO encoder can be integrated
-    without changing downstream call sites.
+    Real-token path:
+    - Input supports encoder feature maps ``[B, T, C, H, W]`` or patch-token
+      sequences ``[B, T, N, C]``.
+    - Keyframes are sampled over ``T``.
+    - Tokens are projected to ``D`` and temporally aggregated.
+    - Output reference tokens are ``[B, N, D]``.
     """
 
     def __init__(
@@ -50,6 +49,7 @@ class DinoRefBranch(nn.Module):
         self.ema_decay = float(ema_decay)
 
         self.proj = nn.LazyLinear(self.embedding_dim)
+        self.attn_score = nn.Linear(self.embedding_dim, 1, bias=False)
 
 
     @staticmethod
@@ -67,12 +67,16 @@ class DinoRefBranch(nn.Module):
 
         if self.aggregator == "mean":
             return frame_embeddings.mean(dim=1)
-        if self.aggregator in {"ema", "attn_pool"}:
-            # Token-wise EMA; attn_pool uses EMA fallback for now.
+        if self.aggregator == "ema":
             ema = frame_embeddings[:, 0]
             for idx in range(1, frame_embeddings.shape[1]):
                 ema = self.ema_decay * ema + (1.0 - self.ema_decay) * frame_embeddings[:, idx]
             return ema
+        if self.aggregator == "attn_pool":
+            # frame_embeddings: [B, Tk, N, C]
+            scores = self.attn_score(frame_embeddings).squeeze(-1)  # [B, Tk, N]
+            weights = torch.softmax(scores, dim=1).unsqueeze(-1)  # [B, Tk, N, 1]
+            return (weights * frame_embeddings).sum(dim=1)
 
         raise ValueError(f"Unsupported dino_ref aggregator: {self.aggregator}")
 
@@ -80,31 +84,48 @@ class DinoRefBranch(nn.Module):
         """Produce token-level reference embeddings.
 
         Args:
-            x: Input image tensor ``[B, T, C, H, W]``.
+            x: Encoder representation, either ``[B, T, C, H, W]`` or
+                unpooled patch tokens ``[B, T, N, C]``.
 
         Returns:
-            Tensor of shape ``[B, num_tokens, embedding_dim]``.
+            Tensor of shape ``[B, N, embedding_dim]``.
         """
-        if x.dim() != 5:
-            raise ValueError(f"DinoRefBranch expects [B,T,C,H,W], got {tuple(x.shape)}")
+        if x.dim() not in {4, 5}:
+            raise ValueError(f"DinoRefBranch expects [B,T,C,H,W] or [B,T,N,C], got {tuple(x.shape)}")
 
-        bsz, num_frames, _, _, _ = x.shape
+        bsz, num_frames = x.shape[0], x.shape[1]
         keyframe_indices = self._select_keyframes(num_frames=num_frames, stride=self.keyframe_stride)
-        keyframes = x[:, keyframe_indices]  # [B, Tk, C, H, W]
 
-        # Proxy tokenization via adaptive pooling; replaced later by frozen DINO patch tokens.
-        token_side = int(self.num_tokens**0.5)
-        token_side = max(1, token_side)
-        if token_side * token_side != self.num_tokens:
-            token_side += 1
-        num_tokens = token_side * token_side
+        if x.dim() == 5:
+            # Convert deepest encoder feature map to unpooled patch-token sequence.
+            keyframes = x[:, keyframe_indices]  # [B, Tk, C, H, W]
+            token_seq = keyframes.flatten(3).permute(0, 1, 3, 2)  # [B, Tk, N, C]
+        else:
+            token_seq = x[:, keyframe_indices]  # [B, Tk, N, C]
 
-        pooled = torch.nn.functional.adaptive_avg_pool2d(
-            keyframes.reshape(-1, keyframes.shape[2], keyframes.shape[3], keyframes.shape[4]),
-            output_size=(token_side, token_side),
-        )
-        pooled = pooled.mean(dim=1).reshape(bsz, len(keyframe_indices), num_tokens, 1)  # [B, Tk, N, 1]
-        frame_embeddings = self.proj(pooled)  # [B, Tk, N, D]
+        # Optional token count normalization for configurable N.
+        if token_seq.shape[2] != self.num_tokens:
+            desired_side = int(self.num_tokens**0.5)
+            desired_side = max(1, desired_side)
+            if desired_side * desired_side != self.num_tokens:
+                desired_side += 1
+            desired_tokens = desired_side * desired_side
+
+            current_tokens = token_seq.shape[2]
+            if current_tokens < desired_tokens:
+                pad = torch.zeros(
+                    token_seq.shape[0],
+                    token_seq.shape[1],
+                    desired_tokens - current_tokens,
+                    token_seq.shape[3],
+                    device=token_seq.device,
+                    dtype=token_seq.dtype,
+                )
+                token_seq = torch.cat([token_seq, pad], dim=2)
+            else:
+                token_seq = token_seq[:, :, :desired_tokens, :]
+
+        frame_embeddings = self.proj(token_seq)  # [B, Tk, N, D]
         return self._aggregate(frame_embeddings)
 
 
