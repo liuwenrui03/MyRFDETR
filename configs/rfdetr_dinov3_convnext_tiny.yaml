@@ -1,0 +1,18 @@
+# RF-DETR DINOv3 ConvNext Tiny — example detection training configuration.
+# Usage:
+#   rfdetr fit --config configs/rfdetr_dinov3_convnext_tiny.yaml
+
+model:
+  model_config:
+    class_path: rfdetr.config.RFDETRDinoV3ConvNextTinyConfig
+    init_args:
+      num_classes: 80 # set to your dataset class count
+  train_config:
+    class_path: rfdetr.config.TrainConfig
+    init_args:
+      dataset_dir: /data/coco # required: path to your COCO-format dataset
+      output_dir: output/rfdetr_dinov3_convnext_tiny
+      epochs: 100
+      batch_size: 6
+      num_workers: 4
+      tensorboard: true
