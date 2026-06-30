@@ -86,6 +86,8 @@ class BuilderArgs(Protocol):
     dino_ref_keyframe_stride: int
     dino_ref_aggregator: str
     dino_ref_fusion: str
+    dino_ref_token_source: str
+    dino_ref_token_stage_idx: int
     dino_ref_stages: list[int]
     dino_ref_gate_init: float
     lidar_enable: bool

@@ -802,6 +802,8 @@ def build_model(args: "BuilderArgs"):
         dino_ref_keyframe_stride=getattr(args, "dino_ref_keyframe_stride", 2),
         dino_ref_aggregator=getattr(args, "dino_ref_aggregator", "ema"),
         dino_ref_fusion=getattr(args, "dino_ref_fusion", "cross_attn"),
+        dino_ref_token_source=getattr(args, "dino_ref_token_source", "deepest"),
+        dino_ref_token_stage_idx=getattr(args, "dino_ref_token_stage_idx", -1),
         dino_ref_stages=getattr(args, "dino_ref_stages", []),
         dino_ref_gate_init=getattr(args, "dino_ref_gate_init", 0.0),
         lidar_enable=getattr(args, "lidar_enable", False),

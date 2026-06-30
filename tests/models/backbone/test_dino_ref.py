@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import torch
+import pytest
 
+from rfdetr.models.backbone.backbone import Backbone
 from rfdetr.models.fusion.dino_ref import DinoRefBranch, DinoRefInjector
 
 
@@ -71,6 +73,53 @@ def test_dino_ref_injector_cat_identity_projection_default() -> None:
     assert out[0].shape == feats[0].shape
 
 
+def test_backbone_select_dino_ref_tokens_deepest_source() -> None:
+    """Backbone token-source policy 'deepest' should return deepest stage patch tokens."""
+    backbone = object.__new__(Backbone)
+    backbone.dino_ref_token_source = "deepest"
+    backbone.dino_ref_token_stage_idx = -1
+
+    stage0 = torch.randn(2, 3, 32, 8, 8)
+    stage1 = torch.randn(2, 3, 32, 4, 4)
+    selected = Backbone._select_dino_ref_tokens(backbone, [stage0, stage1])
+    assert selected.shape == (2, 3, 16, 32)
+
+
+def test_backbone_select_dino_ref_tokens_stage_idx_source() -> None:
+    """Backbone token-source policy 'stage_idx' should return tokens from the configured stage."""
+    backbone = object.__new__(Backbone)
+    backbone.dino_ref_token_source = "stage_idx"
+    backbone.dino_ref_token_stage_idx = 0
+
+    stage0 = torch.randn(2, 3, 24, 6, 6)
+    stage1 = torch.randn(2, 3, 24, 3, 3)
+    selected = Backbone._select_dino_ref_tokens(backbone, [stage0, stage1])
+    assert selected.shape == (2, 3, 36, 24)
+
+
+def test_backbone_select_dino_ref_tokens_all_stages_source() -> None:
+    """Backbone token-source policy 'all_stages' should concat stage tokens along N dimension."""
+    backbone = object.__new__(Backbone)
+    backbone.dino_ref_token_source = "all_stages"
+    backbone.dino_ref_token_stage_idx = -1
+
+    stage0 = torch.randn(2, 2, 16, 4, 4)
+    stage1 = torch.randn(2, 2, 16, 2, 2)
+    selected = Backbone._select_dino_ref_tokens(backbone, [stage0, stage1])
+    assert selected.shape == (2, 2, 20, 16)
+
+
+def test_backbone_select_dino_ref_tokens_stage_idx_out_of_range_raises() -> None:
+    """Backbone should raise when stage_idx source points outside available temporal stages."""
+    backbone = object.__new__(Backbone)
+    backbone.dino_ref_token_source = "stage_idx"
+    backbone.dino_ref_token_stage_idx = 5
+
+    stage0 = torch.randn(2, 2, 16, 4, 4)
+    with pytest.raises(ValueError, match="dino_ref_token_stage_idx out of range"):
+        Backbone._select_dino_ref_tokens(backbone, [stage0])
+
+
 def test_dino_ref_cross_attn_selected_stage_only() -> None:
     """Cross-attn mode should affect only configured stages when gate is non-zero."""
     injector = DinoRefInjector(fusion_mode="cross_attn", gate_init=1.0, stages=[1])
@@ -80,3 +129,4 @@ def test_dino_ref_cross_attn_selected_stage_only() -> None:
     out = injector.inject(feats, ref)
     assert torch.equal(out[0], feats[0])
     assert out[1].shape == feats[1].shape
+

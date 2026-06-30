@@ -179,6 +179,8 @@ def _namespace_from_configs(
             "dino_ref_keyframe_stride": mc.dino_ref.keyframe_stride,
             "dino_ref_aggregator": mc.dino_ref.aggregator,
             "dino_ref_fusion": mc.dino_ref.fusion,
+            "dino_ref_token_source": mc.dino_ref.token_source,
+            "dino_ref_token_stage_idx": mc.dino_ref.token_stage_idx,
             "dino_ref_stages": mc.dino_ref.stages,
             "dino_ref_gate_init": mc.dino_ref.gate_init,
             "lidar_enable": mc.lidar.enable,

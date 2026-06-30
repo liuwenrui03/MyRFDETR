@@ -201,6 +201,16 @@ class TestModelConfigValidation:
         assert config.lidar.enable is True
         assert config.lidar.encoder == "none"
 
+    def test_dino_ref_token_source_fields_accept_supported_values(self, sample_model_config) -> None:
+        """DinoRefConfig should expose configurable token source and stage index."""
+        config = ModelConfig(
+            **sample_model_config,
+            dino_ref=DinoRefConfig(enable=True, token_source="stage_idx", token_stage_idx=1),
+        )
+
+        assert config.dino_ref.token_source == "stage_idx"
+        assert config.dino_ref.token_stage_idx == 1
+
 
 class TestRFDETRBaseConfigEncoder:
     """Encoder field validation on RFDETRBaseConfig (no fixture needed — has defaults)."""

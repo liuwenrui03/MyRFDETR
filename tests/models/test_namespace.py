@@ -11,7 +11,14 @@ from typing import Any
 import pytest
 
 from rfdetr._namespace import _namespace_from_configs
-from rfdetr.config import RFDETRBaseConfig, RFDETRSegNanoConfig, SegmentationTrainConfig, TemporalConfig, TrainConfig
+from rfdetr.config import (
+    DinoRefConfig,
+    RFDETRBaseConfig,
+    RFDETRSegNanoConfig,
+    SegmentationTrainConfig,
+    TemporalConfig,
+    TrainConfig,
+)
 from rfdetr.models._types import BuilderArgs
 
 
@@ -170,6 +177,22 @@ class TestNamespaceFieldOwnership:
         assert ns.temporal_mode == "identity"
         assert ns.temporal_op_kwargs == {}
         assert ns.temporal_aggregator == "last"
+
+    def test_dino_ref_token_source_fields_forwarded(self) -> None:
+        """Namespace should forward DINO-ref token source selection fields from ModelConfig."""
+        mc = RFDETRBaseConfig(
+            num_classes=80,
+            dino_ref=DinoRefConfig(
+                enable=True,
+                token_source="all_stages",
+                token_stage_idx=2,
+            ),
+        )
+        tc = TrainConfig(dataset_dir="/tmp")
+        ns = _namespace_from_configs(mc, tc)
+
+        assert ns.dino_ref_token_source == "all_stages"
+        assert ns.dino_ref_token_stage_idx == 2
 
 
 class TestBuildNamespaceDeprecated:

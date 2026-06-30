@@ -66,6 +66,8 @@ class Backbone(BackboneBase):
         dino_ref_keyframe_stride: int = 2,
         dino_ref_aggregator: str = "ema",
         dino_ref_fusion: str = "cross_attn",
+        dino_ref_token_source: str = "deepest",
+        dino_ref_token_stage_idx: int = -1,
         dino_ref_stages: list[int] | None = None,
         dino_ref_gate_init: float = 0.0,
         lidar_enable: bool = False,
@@ -80,6 +82,8 @@ class Backbone(BackboneBase):
         self.temporal_op_kwargs = dict(temporal_op_kwargs or {})
         self.temporal_aggregator = temporal_aggregator
         self.dino_ref_enable = dino_ref_enable
+        self.dino_ref_token_source = dino_ref_token_source
+        self.dino_ref_token_stage_idx = dino_ref_token_stage_idx
         self.lidar_enable = lidar_enable
 
         if name.startswith("dinov2"):
@@ -296,6 +300,46 @@ class Backbone(BackboneBase):
             f"Unsupported temporal_aggregator: {self.temporal_aggregator}. Expected one of: last, mean, attn_pool."
         )
 
+    def _select_dino_ref_tokens(self, raw_feats_temporal: list[torch.Tensor]) -> torch.Tensor:
+        """Select DINO-ref token source and return tokens as ``[B, T, N, C]``.
+
+        Supported policies:
+            - ``deepest``: use the deepest stage only.
+            - ``stage_idx``: use a specific stage index (supports negative indexing).
+            - ``all_stages``: concatenate tokens from all stages along token dimension.
+        """
+        if not raw_feats_temporal:
+            raise ValueError("raw_feats_temporal must contain at least one stage.")
+
+        def _to_tokens(feat: torch.Tensor) -> torch.Tensor:
+            if feat.dim() != 5:
+                raise ValueError(
+                    f"Expected temporal feature with 5 dims [B,T,C,H,W], got {tuple(feat.shape)}"
+                )
+            return feat.flatten(3).permute(0, 1, 3, 2)
+
+        if self.dino_ref_token_source == "deepest":
+            return _to_tokens(raw_feats_temporal[-1])
+
+        if self.dino_ref_token_source == "stage_idx":
+            num_stages = len(raw_feats_temporal)
+            stage_idx = self.dino_ref_token_stage_idx
+            if stage_idx < 0:
+                stage_idx += num_stages
+            if stage_idx < 0 or stage_idx >= num_stages:
+                raise ValueError(
+                    f"dino_ref_token_stage_idx out of range: {self.dino_ref_token_stage_idx} for {num_stages} stages."
+                )
+            return _to_tokens(raw_feats_temporal[stage_idx])
+
+        if self.dino_ref_token_source == "all_stages":
+            return torch.cat([_to_tokens(feat) for feat in raw_feats_temporal], dim=2)
+
+        raise ValueError(
+            "Unsupported dino_ref_token_source: "
+            f"{self.dino_ref_token_source}. Expected one of: deepest, stage_idx, all_stages."
+        )
+
     def forward(self, tensor_list: NestedTensor):
         """Run backbone and project multi-scale features."""
         x = tensor_list.tensors
@@ -316,8 +360,8 @@ class Backbone(BackboneBase):
         raw_feats = [self._aggregate_temporal_feature(feat) for feat in raw_feats_temporal]
 
         if self.dino_ref_branch is not None and self.dino_ref_injector is not None:
-            deepest_patch_tokens = raw_feats_temporal[-1].flatten(3).permute(0, 1, 3, 2)  # [B, T, N, C]
-            ref_tokens = self.dino_ref_branch(deepest_patch_tokens)
+            selected_tokens = self._select_dino_ref_tokens(raw_feats_temporal)
+            ref_tokens = self.dino_ref_branch(selected_tokens)
             raw_feats = self.dino_ref_injector.inject(raw_feats, ref_tokens)
 
         if self.lidar_branch is not None and self.lidar_fusion is not None:

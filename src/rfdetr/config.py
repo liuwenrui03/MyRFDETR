@@ -126,6 +126,8 @@ class DinoRefConfig(BaseConfig):
     keyframe_stride: int = Field(default=2, ge=1)
     aggregator: Literal["mean", "ema", "attn_pool"] = "ema"
     fusion: Literal["cross_attn", "cat", "both", "none"] = "cross_attn"
+    token_source: Literal["deepest", "stage_idx", "all_stages"] = "deepest"
+    token_stage_idx: int = -1
     stages: List[int] = Field(default_factory=lambda: [2, 3])
     freeze: bool = True
     gate_init: float = 0.0
