@@ -58,6 +58,9 @@ _MC_NAMESPACE_FIELDS = {
     "num_keypoints_per_class",
     "num_decoder_registers",
     "postprocess_trace_alpha",
+    "temporal",
+    "dino_ref",
+    "lidar",
     "two_stage",
 }
 
@@ -168,6 +171,21 @@ def _namespace_from_configs(
             "cls_loss_coef": cls_loss_coef,
             "resume": tc.resume or "",
             "seed": tc.seed if tc.seed is not None else 42,
+            "temporal_mode": mc.temporal.op if mc.temporal.enable else "identity",
+            "temporal_op_kwargs": mc.temporal.op_kwargs if mc.temporal.enable else {},
+            "temporal_aggregator": mc.temporal.aggregator,
+            "num_frames": mc.temporal.num_frames if mc.temporal.enable else 1,
+            "dino_ref_enable": mc.dino_ref.enable,
+            "dino_ref_keyframe_stride": mc.dino_ref.keyframe_stride,
+            "dino_ref_aggregator": mc.dino_ref.aggregator,
+            "dino_ref_fusion": mc.dino_ref.fusion,
+            "dino_ref_stages": mc.dino_ref.stages,
+            "dino_ref_gate_init": mc.dino_ref.gate_init,
+            "lidar_enable": mc.lidar.enable,
+            "lidar_temporal_mode": mc.lidar.temporal.op if mc.lidar.temporal.enable else "identity",
+            "lidar_temporal_op_kwargs": mc.lidar.temporal.op_kwargs if mc.lidar.temporal.enable else {},
+            "lidar_fusion_shallow_stages": mc.lidar.fusion_shallow_stages,
+            "lidar_gate_init": mc.lidar.gate_init,
         }
     )
 

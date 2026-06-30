@@ -108,6 +108,40 @@ class BaseConfig(BaseModel):
         raise ValueError(f"Unknown attribute: '{name}'.")
 
 
+class TemporalConfig(BaseConfig):
+    """Temporal modeling options shared by image and optional multimodal branches."""
+
+    enable: bool = False
+    num_frames: int = Field(default=1, ge=1)
+    op: Literal["identity", "tsm_online", "conv3d", "temp_attn"] = "identity"
+    op_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    aggregator: Literal["last", "mean", "attn_pool"] = "last"
+
+
+class DinoRefConfig(BaseConfig):
+    """Configuration for optional frozen DINO reference branch."""
+
+    enable: bool = False
+    encoder_name: str = "dinov3_vit_small"
+    keyframe_stride: int = Field(default=2, ge=1)
+    aggregator: Literal["mean", "ema", "attn_pool"] = "ema"
+    fusion: Literal["cross_attn", "cat", "both", "none"] = "cross_attn"
+    stages: List[int] = Field(default_factory=lambda: [2, 3])
+    freeze: bool = True
+    gate_init: float = 0.0
+
+
+class LiDARConfig(BaseConfig):
+    """Configuration for optional LiDAR feature integration path."""
+
+    enable: bool = False
+    encoder: Literal["none", "pointpillars", "voxelnet"] = "none"
+    temporal: TemporalConfig = Field(default_factory=TemporalConfig)
+    fusion_shallow_stages: List[int] = Field(default_factory=lambda: [1, 2])
+    fusion_deep: bool = True
+    gate_init: float = 0.0
+
+
 class ModelConfig(BaseConfig):
     encoder: EncoderName
     out_feature_indexes: List[int]
@@ -155,6 +189,9 @@ class ModelConfig(BaseConfig):
     mask_downsample_ratio: int = 4
     backbone_lora: bool = False
     freeze_encoder: bool = False
+    temporal: TemporalConfig = Field(default_factory=TemporalConfig)
+    dino_ref: DinoRefConfig = Field(default_factory=DinoRefConfig)
+    lidar: LiDARConfig = Field(default_factory=LiDARConfig)
     license: str = "Apache-2.0"
     model_name: Optional[str] = Field(
         default=None,

@@ -14,7 +14,9 @@ import torch
 from pydantic import ValidationError
 
 from rfdetr.config import (
+    DinoRefConfig,
     KeypointTrainConfig,
+    LiDARConfig,
     ModelConfig,
     PretrainWeightsCompatibilityWarning,
     RFDETRBaseConfig,
@@ -29,6 +31,7 @@ from rfdetr.config import (
     RFDETRSegXLargeConfig,
     RFDETRSmallConfig,
     SegmentationTrainConfig,
+    TemporalConfig,
     TrainConfig,
     _detect_device,
 )
@@ -164,6 +167,39 @@ class TestModelConfigValidation:
         config = TrainConfig(dataset_dir="/tmp", resume=value)
 
         assert config.resume == os.fspath(value)
+    def test_temporal_dino_lidar_configs_default_disabled(self, sample_model_config) -> None:
+        """New multimodal/temporal config groups should default to disabled-safe values."""
+        config = ModelConfig(**sample_model_config)
+
+        assert config.temporal.enable is False
+        assert config.temporal.op == "identity"
+        assert config.temporal.aggregator == "last"
+        assert config.dino_ref.enable is False
+        assert config.lidar.enable is False
+
+    def test_temporal_config_accepts_supported_modes(self, sample_model_config) -> None:
+        """ModelConfig should accept each supported temporal op mode."""
+        for mode in ("identity", "tsm_online", "conv3d", "temp_attn"):
+            config = ModelConfig(**sample_model_config, temporal=TemporalConfig(enable=True, op=mode))
+            assert config.temporal.op == mode
+
+    def test_temporal_num_frames_must_be_positive(self, sample_model_config) -> None:
+        """TemporalConfig.num_frames must be >= 1."""
+        with pytest.raises(ValidationError):
+            ModelConfig(**sample_model_config, temporal=TemporalConfig(enable=True, num_frames=0))
+
+    def test_dino_ref_and_lidar_nested_config_assignment(self, sample_model_config) -> None:
+        """ModelConfig should accept nested DINO-ref and LiDAR config payloads."""
+        config = ModelConfig(
+            **sample_model_config,
+            dino_ref=DinoRefConfig(enable=True, fusion="cross_attn", stages=[1, 2]),
+            lidar=LiDARConfig(enable=True, encoder="none"),
+        )
+
+        assert config.dino_ref.enable is True
+        assert config.dino_ref.fusion == "cross_attn"
+        assert config.lidar.enable is True
+        assert config.lidar.encoder == "none"
 
 
 class TestRFDETRBaseConfigEncoder:

@@ -795,6 +795,20 @@ def build_model(args: "BuilderArgs"):
         num_windows=args.num_windows,
         positional_encoding_size=args.positional_encoding_size,
         dual_projector=args.dual_projector,
+        temporal_mode=getattr(args, "temporal_mode", "identity"),
+        temporal_op_kwargs=getattr(args, "temporal_op_kwargs", {}),
+        temporal_aggregator=getattr(args, "temporal_aggregator", "last"),
+        dino_ref_enable=getattr(args, "dino_ref_enable", False),
+        dino_ref_keyframe_stride=getattr(args, "dino_ref_keyframe_stride", 2),
+        dino_ref_aggregator=getattr(args, "dino_ref_aggregator", "ema"),
+        dino_ref_fusion=getattr(args, "dino_ref_fusion", "cross_attn"),
+        dino_ref_stages=getattr(args, "dino_ref_stages", []),
+        dino_ref_gate_init=getattr(args, "dino_ref_gate_init", 0.0),
+        lidar_enable=getattr(args, "lidar_enable", False),
+        lidar_temporal_mode=getattr(args, "lidar_temporal_mode", "identity"),
+        lidar_temporal_op_kwargs=getattr(args, "lidar_temporal_op_kwargs", {}),
+        lidar_fusion_shallow_stages=getattr(args, "lidar_fusion_shallow_stages", []),
+        lidar_gate_init=getattr(args, "lidar_gate_init", 0.0),
     )
     if args.encoder_only:
         return backbone[0].encoder, None, None

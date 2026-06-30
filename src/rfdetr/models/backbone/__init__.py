@@ -82,6 +82,20 @@ def build_backbone(
     num_windows,
     positional_encoding_size,
     dual_projector: bool = False,
+    temporal_mode: str = "identity",
+    temporal_op_kwargs: dict | None = None,
+    temporal_aggregator: str = "last",
+    dino_ref_enable: bool = False,
+    dino_ref_keyframe_stride: int = 2,
+    dino_ref_aggregator: str = "ema",
+    dino_ref_fusion: str = "cross_attn",
+    dino_ref_stages: list[int] | None = None,
+    dino_ref_gate_init: float = 0.0,
+    lidar_enable: bool = False,
+    lidar_temporal_mode: str = "identity",
+    lidar_temporal_op_kwargs: dict | None = None,
+    lidar_fusion_shallow_stages: list[int] | None = None,
+    lidar_gate_init: float = 0.0,
 ):
     """
     Useful args:
@@ -113,6 +127,20 @@ def build_backbone(
         num_windows=num_windows,
         positional_encoding_size=positional_encoding_size,
         dual_projector=dual_projector,
+        temporal_mode=temporal_mode,
+        temporal_op_kwargs=temporal_op_kwargs,
+        temporal_aggregator=temporal_aggregator,
+        dino_ref_enable=dino_ref_enable,
+        dino_ref_keyframe_stride=dino_ref_keyframe_stride,
+        dino_ref_aggregator=dino_ref_aggregator,
+        dino_ref_fusion=dino_ref_fusion,
+        dino_ref_stages=dino_ref_stages,
+        dino_ref_gate_init=dino_ref_gate_init,
+        lidar_enable=lidar_enable,
+        lidar_temporal_mode=lidar_temporal_mode,
+        lidar_temporal_op_kwargs=lidar_temporal_op_kwargs,
+        lidar_fusion_shallow_stages=lidar_fusion_shallow_stages,
+        lidar_gate_init=lidar_gate_init,
     )
 
     model = Joiner(backbone, position_embedding)

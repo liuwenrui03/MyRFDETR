@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from rfdetr._namespace import _namespace_from_configs
-from rfdetr.config import RFDETRBaseConfig, RFDETRSegNanoConfig, SegmentationTrainConfig, TrainConfig
+from rfdetr.config import RFDETRBaseConfig, RFDETRSegNanoConfig, SegmentationTrainConfig, TemporalConfig, TrainConfig
 from rfdetr.models._types import BuilderArgs
 
 
@@ -148,6 +148,28 @@ class TestNamespaceFieldOwnership:
         tc = TrainConfig(dataset_dir="/tmp")
         ns = _namespace_from_configs(mc, tc)
         assert ns.num_select == expected_num_select
+    def test_temporal_fields_forwarded_from_model_config(self) -> None:
+        """Namespace should expose derived temporal builder args from ModelConfig.temporal."""
+        mc = RFDETRBaseConfig(
+            num_classes=80,
+            temporal=TemporalConfig(enable=True, op="tsm_online", op_kwargs={"shift_div": 4}, aggregator="mean"),
+        )
+        tc = TrainConfig(dataset_dir="/tmp")
+        ns = _namespace_from_configs(mc, tc)
+
+        assert ns.temporal_mode == "tsm_online"
+        assert ns.temporal_op_kwargs == {"shift_div": 4}
+        assert ns.temporal_aggregator == "mean"
+
+    def test_temporal_fields_default_to_identity_when_disabled(self) -> None:
+        """Disabled temporal config should map to identity mode to preserve baseline behavior."""
+        mc = RFDETRBaseConfig(num_classes=80, temporal=TemporalConfig(enable=False, op="conv3d"))
+        tc = TrainConfig(dataset_dir="/tmp")
+        ns = _namespace_from_configs(mc, tc)
+
+        assert ns.temporal_mode == "identity"
+        assert ns.temporal_op_kwargs == {}
+        assert ns.temporal_aggregator == "last"
 
 
 class TestBuildNamespaceDeprecated:

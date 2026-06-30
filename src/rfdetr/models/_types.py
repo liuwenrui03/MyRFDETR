@@ -58,6 +58,9 @@ class BuilderArgs(Protocol):
     amp: bool
     num_classes: int
     pretrain_weights: Optional[str]
+    temporal: object
+    dino_ref: object
+    lidar: object
     device: str
     resolution: int
     group_detr: int
@@ -75,6 +78,21 @@ class BuilderArgs(Protocol):
     position_embedding: str
     rms_norm: bool
     force_no_pretrain: bool
+    temporal_mode: str
+    temporal_op_kwargs: dict
+    temporal_aggregator: str
+    num_frames: int
+    dino_ref_enable: bool
+    dino_ref_keyframe_stride: int
+    dino_ref_aggregator: str
+    dino_ref_fusion: str
+    dino_ref_stages: list[int]
+    dino_ref_gate_init: float
+    lidar_enable: bool
+    lidar_temporal_mode: str
+    lidar_temporal_op_kwargs: dict
+    lidar_fusion_shallow_stages: list[int]
+    lidar_gate_init: float
     dim_feedforward: int
     use_cls_token: bool
     pretrained_encoder: Optional[str]

@@ -163,6 +163,7 @@ class RFDETRDataModule(LightningDataModule):
             )
         self._collate_fn = make_collate_fn(
             block_size=block_size,
+            num_frames=self.model_config.temporal.num_frames if self.model_config.temporal.enable else 1,
         )
 
         self._dataset_train: Optional[torch.utils.data.Dataset] = None

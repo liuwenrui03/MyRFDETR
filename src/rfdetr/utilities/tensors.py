@@ -60,11 +60,13 @@ class NestedTensor:
     """Batch of tensors with variable spatial sizes, padded to a common size.
 
     Stores both the padded tensor and a boolean mask indicating padding positions.
+    Optionally carries auxiliary modality tensors (e.g. LiDAR).
     """
 
-    def __init__(self, tensors: Tensor, mask: Tensor | None) -> None:
+    def __init__(self, tensors: Tensor, mask: Tensor | None, lidar: Tensor | None = None) -> None:
         self.tensors = tensors
         self.mask = mask
+        self.lidar = lidar
 
     def to(self, device: torch.device, **kwargs: Any) -> "NestedTensor":
         """Move tensors and mask to *device*.
@@ -82,7 +84,8 @@ class NestedTensor:
             cast_mask = mask.to(device, **kwargs)
         else:
             cast_mask = None
-        return NestedTensor(cast_tensor, cast_mask)
+        cast_lidar = self.lidar.to(device, **kwargs) if self.lidar is not None else None
+        return NestedTensor(cast_tensor, cast_mask, lidar=cast_lidar)
 
     def pin_memory(self) -> "NestedTensor":
         """Pin tensor and mask memory for faster CPU→GPU transfer.
@@ -93,6 +96,7 @@ class NestedTensor:
         return NestedTensor(
             self.tensors.pin_memory(),
             self.mask.pin_memory() if self.mask is not None else None,
+            lidar=self.lidar.pin_memory() if self.lidar is not None else None,
         )
 
     def decompose(self) -> tuple[Tensor, Tensor | None]:
@@ -295,9 +299,26 @@ def _bilinear_grid_sample(
     return wx0 * wy0 * v00 + wx1 * wy0 * v10 + wx0 * wy1 * v01 + wx1 * wy1 * v11
 
 
+def _build_lidar_batch(lidar_items: list[Tensor | None]) -> Tensor | None:
+    """Stack optional LiDAR tensors when all samples provide compatible items."""
+    if len(lidar_items) == 0 or any(item is None for item in lidar_items):
+        return None
+
+    first = lidar_items[0]
+    assert first is not None
+    if any(item is None or item.dim() != first.dim() for item in lidar_items):
+        return None
+
+    try:
+        return torch.stack([item for item in lidar_items if item is not None], dim=0)
+    except RuntimeError:
+        return None
+
+
 def _collate_with_block_size(
     batch: list[tuple[Any, ...]],
     block_size: int | None = None,
+    num_frames: int = 1,
 ) -> tuple[Any, ...]:
     """Module-level collate helper used as the base for :func:`make_collate_fn`.
 
@@ -313,8 +334,33 @@ def _collate_with_block_size(
         Tuple of ``(NestedTensor_of_images, tuple_of_targets)``.
     """
     batch = list(zip(*batch))
-    batch[0] = nested_tensor_from_tensor_list(batch[0], block_size=block_size)
-    return tuple(batch)
+
+    images = list(batch[0])
+    targets = list(batch[1])
+
+    lidar_batch = None
+    if len(batch) > 2:
+        lidar_batch = _build_lidar_batch(list(batch[2]))
+
+    if num_frames > 1:
+        expanded_images: list[Tensor] = []
+        for image in images:
+            if image.dim() == 3:
+                expanded_images.append(image.unsqueeze(0).repeat(num_frames, 1, 1, 1))
+            elif image.dim() == 4:
+                expanded_images.append(image)
+            else:
+                raise ValueError(f"Unsupported image ndim {image.dim()} for temporal collation")
+
+        frame_nested = [nested_tensor_from_tensor_list(list(frames), block_size=block_size) for frames in expanded_images]
+        image_tensor = torch.stack([nt.tensors for nt in frame_nested], dim=0)
+        image_mask = torch.stack([nt.mask for nt in frame_nested], dim=0)
+        nested = NestedTensor(image_tensor, image_mask, lidar=lidar_batch)
+        return nested, tuple(targets)
+
+    nested = nested_tensor_from_tensor_list(images, block_size=block_size)
+    nested.lidar = lidar_batch
+    return nested, tuple(targets)
 
 
 def collate_fn(batch: list[tuple[Any, ...]]) -> tuple[Any, ...]:
@@ -330,11 +376,12 @@ def collate_fn(batch: list[tuple[Any, ...]]) -> tuple[Any, ...]:
     Returns:
         Tuple of ``(NestedTensor_of_images, tuple_of_targets)``.
     """
-    return _collate_with_block_size(batch, block_size=None)
+    return _collate_with_block_size(batch, block_size=None, num_frames=1)
 
 
 def make_collate_fn(
     block_size: int | None = None,
+    num_frames: int = 1,
 ) -> Callable[[list[tuple[Any, ...]]], tuple[Any, ...]]:
     """Build a collate function that rounds batch ``H``/``W`` up to *block_size*.
 
@@ -352,4 +399,4 @@ def make_collate_fn(
     Returns:
         A collate callable suitable for ``torch.utils.data.DataLoader``.
     """
-    return partial(_collate_with_block_size, block_size=block_size)
+    return partial(_collate_with_block_size, block_size=block_size, num_frames=num_frames)
